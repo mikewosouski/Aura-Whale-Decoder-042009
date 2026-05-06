@@ -5,15 +5,18 @@ import librosa
 import librosa.display
 import matplotlib.pyplot as plt
 import scipy.signal as signal
+import requests
+import base64
 
-# Set up the page
-st.set_page_config(page_title="Aura Research Database", layout="wide")
+# 1. Page Config
+st.set_page_config(page_title="Aura Global Research", layout="wide")
 
-# Initialize the Research Memory (Session State)
-if "research_history" not in st.session_state:
-    st.session_state.research_history = {} # Stores {Filename: {y: data, sr: rate, events: count}}
+# Connection Info (Pulled from your Secrets)
+GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+REPO = st.secrets["REPO_NAME"]  # Should be: mikewososouski/Aura-Whale-Decoder-042009
+BRANCH = "main"
 
-# 1. Security Logic
+# 2. Security Wall
 def check_password():
     if "password_correct" not in st.session_state:
         st.text_input("Enter Research Password", type="password", key="password")
@@ -22,72 +25,90 @@ def check_password():
         return False
     return st.session_state["password_correct"]
 
-if check_password():
-    st.title("🐋 Aura Whale Research Database")
+# 3. Permanent Save Function (Community Archive)
+def save_to_github(uploaded_file):
+    # This path targets the research_data folder you created
+    url = f"https://api.github.com/repos/{REPO}/contents/research_data/{uploaded_file.name}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    
+    # Check if file exists to prevent overwriting
+    res = requests.get(url, headers=headers)
+    if res.status_code == 200:
+        return "⚠️ This recording is already in the archive."
 
-    # 2. Upload Section
-    with st.expander("⬆️ Upload New Data", expanded=True):
-        uploaded_files = st.file_uploader("Drop new audio files here", type=["wav", "mp3"], accept_multiple_files=True)
-        
-        if uploaded_files:
-            for file in uploaded_files:
-                if file.name not in st.session_state.research_history:
-                    with st.spinner(f"Decoding {file.name}..."):
-                        y, sr = librosa.load(file, sr=None)
-                        peaks, _ = signal.find_peaks(y, height=np.mean(y) + (np.std(y) * 2))
-                        
-                        # Save everything into memory
-                        st.session_state.research_history[file.name] = {
-                            "y": y,
-                            "sr": sr,
-                            "events": len(peaks),
-                            "duration": round(librosa.get_duration(y=y, sr=sr), 2),
-                            "file_obj": file
-                        }
-            st.success("All files processed and added to history!")
-
-    # 3. The History Table (The "Master Sheet")
-    if st.session_state.research_history:
-        st.subheader("📊 Research Results Log")
-        
-        # Create a clean table from our memory
-        history_data = [
-            {"File Name": name, "Events": data["events"], "Length (s)": data["duration"]}
-            for name, data in st.session_state.research_history.items()
-        ]
-        st.table(pd.DataFrame(history_data))
-
-        # 4. VIEW PREVIOUS TESTS (The Back-and-Forth Section)
-        st.divider()
-        st.subheader("🔍 Detailed Archive View")
-        
-        # Dropdown to pick ANY file we've ever uploaded in this session
-        selected_file = st.selectbox(
-            "Select a file from your history to view its graphs:", 
-            options=list(st.session_state.research_history.keys())
-        )
-
-        if selected_file:
-            data = st.session_state.research_history[selected_file]
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"**Analysis for:** {selected_file}")
-                fig, ax = plt.subplots()
-                librosa.display.waveshow(data["y"], sr=data["sr"], ax=ax)
-                st.pyplot(fig)
-            
-            with col2:
-                st.write(f"**Detected Events:** {data['events']}")
-                fig, ax = plt.subplots()
-                D = librosa.amplitude_to_db(np.abs(librosa.stft(data["y"])), ref=np.max)
-                librosa.display.specshow(D, sr=data["sr"], x_axis='time', y_axis='hz', ax=ax)
-                st.pyplot(fig)
-
-            st.audio(data["file_obj"])
+    content = base64.b64encode(uploaded_file.getvalue()).decode()
+    data = {
+        "message": f"New Community Contribution: {uploaded_file.name}",
+        "content": content,
+        "branch": BRANCH
+    }
+    
+    put_res = requests.put(url, json=data, headers=headers)
+    if put_res.status_code == 201:
+        return "✅ Success! Added to the Global Archive for all researchers."
     else:
-        st.info("No data in history. Please upload a file to begin.")
+        return f"❌ Sync failed: {put_res.json().get('message')}"
+
+if check_password():
+    st.title("🐋 Aura Community Research Archive")
+    st.markdown("---")
+
+    # 4. Global Contribution Section
+    col_up, col_info = st.columns([1, 1])
+    with col_up:
+        st.subheader("⬆️ Contribute Data")
+        uploaded_file = st.file_uploader("Upload audio to save permanently", type=["wav", "mp3"])
+        if uploaded_file:
+            if st.button("🚀 Sync to Global Database"):
+                with st.spinner("Linking to the universal fabric..."):
+                    msg = save_to_github(uploaded_file)
+                    st.success(msg)
+
+    with col_info:
+        st.info("**Archive Protocol:**\n- Files are stored permanently in the GitHub repo.\n- Visible to anyone with access to this dashboard.\n- Please ensure high-quality audio for accurate click detection.")
+
+    st.divider()
+
+    # 5. Shared Library View
+    st.subheader("🌐 Shared Research Library")
+    list_url = f"https://api.github.com/repos/{REPO}/contents/research_data"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    files_res = requests.get(list_url, headers=headers)
+    
+    if files_res.status_code == 200:
+        # Filter for audio files only
+        file_list = [f['name'] for f in files_res.json() if f['name'].endswith(('.wav', '.mp3'))]
+        
+        if not file_list:
+            st.warning("Archive folder found, but it is currently empty.")
+        else:
+            selected_file = st.selectbox("Choose a file to analyze:", ["-- Select a File --"] + file_list)
+
+            if selected_file != "-- Select a File --":
+                raw_url = next(f['download_url'] for f in files_res.json() if f['name'] == selected_file)
+                
+                with st.spinner("Decoding shared frequencies..."):
+                    y, sr = librosa.load(raw_url, sr=None)
+                    # The Math: Finding peaks 2 standard deviations above the mean
+                    peaks, _ = signal.find_peaks(y, height=np.mean(y) + (np.std(y) * 2))
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        fig, ax = plt.subplots()
+                        librosa.display.waveshow(y, sr=sr, ax=ax)
+                        ax.set_title(f"Waveform: {selected_file}")
+                        st.pyplot(fig)
+                    with c2:
+                        fig, ax = plt.subplots()
+                        D = librosa.amplitude_to_db(np.abs(librosa.stft(y)), ref=np.max)
+                        librosa.display.specshow(D, sr=sr, x_axis='time', y_axis='hz', ax=ax)
+                        ax.set_title("Spectrogram (Pattern Recognition)")
+                        st.pyplot(fig)
+                    
+                    st.metric("Detected Acoustic Events", len(peaks))
+                    st.audio(raw_url)
+    else:
+        st.error(f"Database connection error. Check if the folder 'research_data' exists in {REPO}.")
 
 else:
-    st.warning("Please enter the password to access the research tools.")
-
+    st.warning("Access Restricted. Please log in to view the fabric of the ocean.")

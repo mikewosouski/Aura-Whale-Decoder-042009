@@ -13,7 +13,7 @@ st.set_page_config(page_title="Aura Global Research", layout="wide")
 
 # Connection Info (Pulled from your Secrets)
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
-REPO = st.secrets["REPO_NAME"]  # Should be: mikewososouski/Aura-Whale-Decoder-042009
+REPO = st.secrets["REPO_NAME"]  # Should be: mikewosouski/Aura-Whale-Decoder-042009
 BRANCH = "main"
 
 # 2. Security Wall

@@ -12,8 +12,8 @@ import base64
 st.set_page_config(page_title="Aura Global Research", layout="wide")
 
 # Connection Info (Pulled from your Secrets)
-GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
-REPO = st.secrets["REPO_NAME"]  # Should be: mikewosouski/Aura-Whale-Decoder-042009
+GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", "")
+REPO = st.secrets.get("REPO_NAME", "mikewosouski/Aura-Whale-Decoder-042009")
 BRANCH = "main"
 
 # 2. Security Wall
@@ -78,14 +78,19 @@ if check_password():
     files_res = requests.get(list_url, headers=headers)
     
     if files_res.status_code == 200:
-        file_list = [f['name'] for f in files_res.json() if f['name'].endswith(('.wav', '.mp3'))]
-        
+        all_files = files_res.json()
+        file_list = [f['name'] for f in all_files if f['name'].lower().endswith(('.wav', '.mp3'))]
+        txt_files = [f['name'] for f in all_files if not f['name'].lower().endswith(('.wav', '.mp3'))]
+
         if not file_list:
-            st.warning("The 'research_data' folder exists, but it's empty!")
+            msg = "No audio files (.wav or .mp3) were found in research_data."
+            if txt_files:
+                msg += f" Other files present: {', '.join(txt_files)}"
+            st.warning(msg)
         else:
             selected_file = st.selectbox("Choose a file:", ["-- Select --"] + file_list)
             if selected_file != "-- Select --":
-                raw_url = next(f['download_url'] for f in files_res.json() if f['name'] == selected_file)
+                raw_url = next(f['download_url'] for f in all_files if f['name'] == selected_file)
                 st.audio(raw_url)
     else:
         # This part will reveal the actual secret error

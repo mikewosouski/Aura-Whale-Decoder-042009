@@ -8,12 +8,12 @@ import scipy.signal as signal
 import requests
 import base64
 
-# 1. Page Config
+# 1. Page Configuration
 st.set_page_config(page_title="Aura Global Research", layout="wide")
 
 # Connection Info (Pulled from your Secrets)
-GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", "")
-REPO = st.secrets.get("REPO_NAME", "mikewosouski/Aura-Whale-Decoder-042009")
+GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+REPO = st.secrets["REPO_NAME"] 
 BRANCH = "main"
 
 # 2. Security Wall
@@ -25,13 +25,12 @@ def check_password():
         return False
     return st.session_state["password_correct"]
 
-# 3. Permanent Save Function (Community Archive)
+# 3. Permanent Save Function
 def save_to_github(uploaded_file):
-    # This path targets the research_data folder you created
     url = f"https://api.github.com/repos/{REPO}/contents/research_data/{uploaded_file.name}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     
-    # Check if file exists to prevent overwriting
+    # Check if file exists
     res = requests.get(url, headers=headers)
     if res.status_code == 200:
         return "⚠️ This recording is already in the archive."
@@ -45,7 +44,7 @@ def save_to_github(uploaded_file):
     
     put_res = requests.put(url, json=data, headers=headers)
     if put_res.status_code == 201:
-        return "✅ Success! Added to the Global Archive for all researchers."
+        return "✅ Success! Added to the Global Archive."
     else:
         return f"❌ Sync failed: {put_res.json().get('message')}"
 
@@ -53,11 +52,11 @@ if check_password():
     st.title("🐋 Aura Community Research Archive")
     st.markdown("---")
 
-    # 4. Global Contribution Section
+    # 4. Upload Section
     col_up, col_info = st.columns([1, 1])
     with col_up:
         st.subheader("⬆️ Contribute Data")
-        uploaded_file = st.file_uploader("Upload audio to save permanently", type=["wav", "mp3"])
+        uploaded_file = st.file_uploader("Upload audio (WAV/MP3)", type=["wav", "mp3"])
         if uploaded_file:
             if st.button("🚀 Sync to Global Database"):
                 with st.spinner("Linking to the universal fabric..."):
@@ -65,35 +64,53 @@ if check_password():
                     st.success(msg)
 
     with col_info:
-        st.info("**Archive Protocol:**\n- Files are stored permanently in the GitHub repo.\n- Visible to anyone with access to this dashboard.\n- Please ensure high-quality audio for accurate click detection.")
+        st.info("**Archive Protocol:**\n- Files store permanently in GitHub.\n- Viewable by the research collective.")
 
     st.divider()
 
-    # 5. Shared Library View (DEBUG VERSION)
+    # 5. Shared Library & Visualization
     st.subheader("🌐 Shared Research Library")
     list_url = f"https://api.github.com/repos/{REPO}/contents/research_data"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    
-    # Try to fetch the folder
     files_res = requests.get(list_url, headers=headers)
     
     if files_res.status_code == 200:
-        all_files = files_res.json()
-        file_list = [f['name'] for f in all_files if f['name'].lower().endswith(('.wav', '.mp3'))]
-        txt_files = [f['name'] for f in all_files if not f['name'].lower().endswith(('.wav', '.mp3'))]
-
+        file_list = [f['name'] for f in files_res.json() if f['name'].endswith(('.wav', '.mp3'))]
+        
         if not file_list:
-            msg = "No audio files (.wav or .mp3) were found in research_data."
-            if txt_files:
-                msg += f" Other files present: {', '.join(txt_files)}"
-            st.warning(msg)
+            st.warning("Archive is currently empty.")
         else:
-            selected_file = st.selectbox("Choose a file:", ["-- Select --"] + file_list)
-            if selected_file != "-- Select --":
-                raw_url = next(f['download_url'] for f in all_files if f['name'] == selected_file)
-                st.audio(raw_url)
+            selected_file = st.selectbox("Select a file for frequency analysis:", ["-- Choose a File --"] + file_list)
+
+            if selected_file != "-- Choose a File --":
+                raw_url = next(f['download_url'] for f in files_res.json() if f['name'] == selected_file)
+                
+                with st.spinner("Decoding shared frequencies..."):
+                    # Download and load audio
+                    y, sr = librosa.load(raw_url, sr=None)
+                    
+                    # Math for Click Detection (Standard Deviation analysis)
+                    peaks, _ = signal.find_peaks(y, height=np.mean(y) + (np.std(y) * 2))
+
+                    # Display Graphs
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write("**Acoustic Waveform**")
+                        fig, ax = plt.subplots()
+                        librosa.display.waveshow(y, sr=sr, ax=ax, color="#4F8BFF")
+                        st.pyplot(fig)
+                        
+                    with c2:
+                        st.write("**Frequency Spectrogram**")
+                        fig, ax = plt.subplots()
+                        D = librosa.amplitude_to_db(np.abs(librosa.stft(y)), ref=np.max)
+                        librosa.display.specshow(D, sr=sr, x_axis='time', y_axis='hz', ax=ax)
+                        st.pyplot(fig)
+                    
+                    st.metric("Detected Acoustic Events", len(peaks))
+                    st.audio(raw_url)
     else:
-        # This part will reveal the actual secret error
-        st.error(f"⚠️ Connection Error: {files_res.status_code}")
-        st.write(f"GitHub Message: {files_res.json().get('message')}")
-        st.info(f"Checking Repo Path: {REPO}")
+        st.error("Database connection issue. Check your folder permissions.")
+
+else:
+    st.warning("Access Restricted. Please log in to view the fabric of the ocean")
